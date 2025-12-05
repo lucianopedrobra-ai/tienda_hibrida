@@ -15,13 +15,12 @@ except:
     st.stop()
 
 # --- 3. CONEXIÓN A LOS DATOS (TU CSV DE DRIVE) ---
-# Este es el link exacto que me pasaste. Es el corazón de la app.
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUG5PPo2kN1HkP2FY1TNAU9-ehvXqcvE_S9VBnrtQIxS9eVNmnh6Uin_rkvnarDQ/pub?gid=2029869540&single=true&output=csv"
 
-@st.cache_data(ttl=600) # Se actualiza cada 10 minutos para no saturar
+@st.cache_data(ttl=600)
 def load_data():
     try:
-        # Leemos todo como texto (dtype=str) para que no se rompan los códigos SKU
+        # dtype=str evita errores con códigos que parecen números
         df = pd.read_csv(SHEET_URL, dtype=str).fillna("")
         return df 
     except Exception as e:
@@ -84,7 +83,6 @@ col_chat, col_shop = st.columns([1, 2], gap="medium")
 with col_chat:
     st.subheader("💬 Preguntale a Lucho")
     
-    # Preparamos el contexto para Lucho
     if df is not None:
         csv_context = df.to_csv(index=False)
     else:
@@ -92,7 +90,6 @@ with col_chat:
 
     items_carrito = ", ".join([i['nombre'] for i in st.session_state.cart])
     
-    # Prompt Especial para la Tienda
     sys_prompt = f"""
     ROL: Eres Lucho, vendedor experto de Pedro Bravin S.A.
     OBJETIVO: Ayudar al cliente a navegar el catálogo que tiene a su derecha.
@@ -113,19 +110,16 @@ with col_chat:
     if "messages_shop" not in st.session_state:
         st.session_state.messages_shop = [{"role": "assistant", "content": "👋 Hola! Soy Lucho. A tu derecha tenés el catálogo completo.\n\n¿Necesitás ayuda técnica para elegir algún material?"}]
 
-    # Mostrar historial
     for msg in st.session_state.messages_shop:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Input del chat
     if prompt := st.chat_input("Ej: ¿Qué chapa uso para un techo bajo?"):
         st.session_state.messages_shop.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
         
         try:
-            # Usamos Flash para respuesta rápida en tienda
             model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=sys_prompt)
             response = model.generate_content([m["content"] for m in st.session_state.messages_shop])
             
@@ -147,26 +141,23 @@ with col_shop:
     # 2. Filtrado de Datos
     if df is not None:
         if search_term:
-            # Filtro insensible a mayúsculas
             filtered_df = df[df.apply(lambda row: search_term.lower() in row.astype(str).str.lower().values.sum(), axis=1)]
         else:
-            filtered_df = df.head(12) # Muestra los primeros 12 si no buscan nada
+            filtered_df = df.head(12) 
 
         # 3. Grilla de Productos
         if not filtered_df.empty:
-            # Calculamos filas necesarias (3 productos por fila)
             rows = [filtered_df.iloc[i:i+3] for i in range(0, len(filtered_df), 3)]
             
             for row_products in rows:
                 cols = st.columns(3)
-                for idx, (_, product) in enumerate(row_products.iterrows()):
+                # CORRECCIÓN CRÍTICA: Desempaquetamos el índice real (unique_id) del DataFrame
+                for idx, (unique_id, product) in enumerate(row_products.iterrows()):
                     with cols[idx]:
-                        # Datos del producto
                         p_sku = product.get('ID_SKU', '---')
                         p_nom = product.get('Producto', 'Producto sin nombre')
                         p_precio = product.get('Precio_Lista', '0')
                         
-                        # Tarjeta Visual HTML
                         st.markdown(f"""
                         <div class="product-card">
                             <div class="product-sku">{p_sku}</div>
@@ -178,8 +169,8 @@ with col_shop:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # Botón Nativo Streamlit (Clave para que funcione la lógica)
-                        if st.button("➕ Agregar", key=f"add_{p_sku}_{idx}"):
+                        # USAMOS EL UNIQUE_ID PARA LA KEY DEL BOTÓN (EVITA DUPLICADOS)
+                        if st.button("➕ Agregar", key=f"add_{unique_id}"):
                             add_to_cart({"sku": p_sku, "nombre": p_nom, "precio": p_precio})
         else:
             st.info("No encontré productos con ese nombre.")
@@ -191,7 +182,6 @@ with st.sidebar:
     st.title(f"🛒 Tu Carrito ({len(st.session_state.cart)})")
     
     if st.session_state.cart:
-        total_estimado = 0
         pedido_str = ""
         
         for i, item in enumerate(st.session_state.cart):
@@ -204,7 +194,6 @@ with st.sidebar:
             clear_cart()
             st.rerun()
             
-        # Generar Link WhatsApp
         msg_ws = f"Hola Martín! Armé este pedido en la Tienda Web:\n\n{pedido_str}\n\n¿Me confirmás el stock y el precio final con IVA?"
         link_ws = f"https://wa.me/5493401527780?text={urllib.parse.quote(msg_ws)}"
         
