@@ -14,13 +14,13 @@ except:
     st.error("⚠️ Error: No se detectó la API Key. Configurala en los 'Secrets' de Streamlit.")
     st.stop()
 
-# --- 3. CONEXIÓN A LOS DATOS (TU CSV DE DRIVE) ---
+# --- 3. CONEXIÓN A LOS DATOS (TU ENLACE CONFIRMADO) ---
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUG5PPo2kN1HkP2FY1TNAU9-ehvXqcvE_S9VBnrtQIxS9eVNmnh6Uin_rkvnarDQ/pub?gid=2029869540&single=true&output=csv"
 
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # dtype=str evita errores con códigos que parecen números
+        # dtype=str es vital para que no se rompan los códigos que parecen números
         df = pd.read_csv(SHEET_URL, dtype=str).fillna("")
         return df 
     except Exception as e:
@@ -120,7 +120,8 @@ with col_chat:
             st.markdown(prompt)
         
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=sys_prompt)
+            # Usamos PRO para máxima inteligencia como pediste
+            model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=sys_prompt)
             response = model.generate_content([m["content"] for m in st.session_state.messages_shop])
             
             st.session_state.messages_shop.append({"role": "assistant", "content": response.text})
@@ -151,7 +152,7 @@ with col_shop:
             
             for row_products in rows:
                 cols = st.columns(3)
-                # CORRECCIÓN CRÍTICA: Desempaquetamos el índice real (unique_id) del DataFrame
+                # SOLUCIÓN DEL ERROR: Usamos el 'unique_id' (índice) para la key
                 for idx, (unique_id, product) in enumerate(row_products.iterrows()):
                     with cols[idx]:
                         p_sku = product.get('ID_SKU', '---')
@@ -169,7 +170,7 @@ with col_shop:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # USAMOS EL UNIQUE_ID PARA LA KEY DEL BOTÓN (EVITA DUPLICADOS)
+                        # KEY ÚNICA = "add_" + INDICE DE FILA. ¡Esto no falla!
                         if st.button("➕ Agregar", key=f"add_{unique_id}"):
                             add_to_cart({"sku": p_sku, "nombre": p_nom, "precio": p_precio})
         else:
